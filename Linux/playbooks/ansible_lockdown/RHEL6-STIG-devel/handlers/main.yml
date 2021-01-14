@@ -1,0 +1,99 @@
+- name: restart ntpd
+  service:
+      name: ntpd
+      state: restarted
+
+- name: restart sshd
+  service:
+      name: sshd
+      state: restarted
+
+- name: restart snmpd
+  service:
+      name: snmpd
+      state: restarted
+
+- name: restart xinetd
+  service:
+      name: xinetd
+      state: restarted
+
+- name: reload xinetd
+  service:
+      name: xinetd
+      state: reloaded
+
+- name: restart auditd
+  service:
+      name: auditd
+      state: restarted
+
+- name: unload usb-storage
+  modprobe:
+    name: usb-storage
+    state: absent
+
+- name: update postfix aliases.db
+  command: newaliases
+
+- name: restart postfix
+  service:
+      name: postfix
+      state: restarted
+
+- name: restart gdm
+  shell: telinit 3; sleep 2; telinit 5
+
+- name: restart iptables
+  service:
+      name: iptables
+      state: restarted
+
+- name: save iptables rules
+  shell: iptables-save > /etc/sysconfig/iptables
+  args:
+      warn: no
+  notify: restart iptables
+
+- name: restart ip6tables
+  service:
+      name: ip6tables
+      state: restarted
+
+- name: save ip6tables rules
+  shell: ip6tables-save  > /etc/sysconfig/ip6tables
+  args:
+      warn: no
+  notify: restart ip6tables
+
+- name: restart vsftpd
+  service:
+      name: vsftpd
+      state: restarted
+
+- name: restart samba
+  service:
+      name: smb
+      state: restarted
+  when: "'smb' in sysv_services.stdout"
+
+- name: restart nfs
+  service:
+      name: nfs
+      state: restarted
+
+- name: init aide
+  command: "/usr/sbin/aide --init -B 'database_out=file:{{rhel6stig_aide_dbdir}}/{{rhel6stig_aide_dbnewfile}}'"
+  async: 45
+  poll: 0
+  when: not ansible_check_mode
+  notify: move new aide db into place
+
+- name: move new aide db into place
+  command: "mv {{rhel6stig_aide_dbdir}}/{{rhel6stig_aide_dbnewfile}} {{rhel6stig_aide_dbdir}}/{{rhel6stig_aide_dbfile}}"
+
+- name: reset audit pkg ugids
+  command: rpm --setugids audit
+
+- name: remount /tmp
+  command: mount -o remount /tmp
