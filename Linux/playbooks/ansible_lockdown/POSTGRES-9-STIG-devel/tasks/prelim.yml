@@ -1,0 +1,323 @@
+---
+#DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+#
+#This material is based upon work supported by the Department of the Air Force and MISSILE DEFENSE AGENCY under Air Force Contract No. FA8702-15-D-0001. Any opinions, findings, conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the Department of the Air Force and MISSILE DEFENSE AGENCY.
+#
+#© 2019 Massachusetts Institute of Technology.
+#
+#The software/firmware is provided to you on an As-Is basis
+#
+#Delivered to the U.S. Government with Unlimited Rights, as defined in DFARS Part 252.227-7013 or 7014 (Feb 2014). Notwithstanding any copyright notice, U.S. Government rights in this work are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other than as specifically authorized by the U.S. Government may violate any copyrights that exist in this work.
+
+- name: "PRELIM | Gather mount information"
+  setup:
+      gather_subset: hardware,!all,!min
+      filter: ansible_mounts
+  when:
+      - ansible_mounts is not defined
+      - pgs9_00_008000 or
+        pgs9_00_008200
+  tags:
+      - cat1
+      - high
+      - PGS9-00-008000
+      - PGS9-00-008200
+
+- name: "PRELIM | RHEL-07-010480 | RHEL-07-010490 | RHEL-07-021350 | RHEL-07-021700 | Check whether machine is UEFI-based"
+  stat:
+      path: /sys/firmware/efi
+  register: pgs9_00_sys_firmware_efi
+  when:
+      - pgs9_00_008000 or
+        pgs9_00_008200
+  tags:
+      - cat1
+      - high
+      - PGS9-00-008000
+      - PGS9-00-008200
+
+- name: "PRELIM | PGS9-00-008000 | Check if /boot or /boot/efi reside on separate partitions"
+  shell: df --output=target /boot | tail -n 1
+  changed_when: no
+  check_mode: no
+  register: pgs9_00_boot_part
+  when:
+      - pgs9_00_008000 or
+        pgs9_00_008200
+  tags:
+      - cat1
+      - high
+      - PGS9-00-008000
+      - PGS9-00-008200
+
+
+- name: "PRELIM | Install and start Postgres"
+  block:
+      - name: "PRELIM | Ensure postgres is started"
+        service:
+            name: "{{ pgs9stig_postgres_service }}"
+            state: started
+  rescue:
+      - name: workaround ansible bug
+        meta: noop
+
+      - name: PRELIM | Enable Postgres YUM module
+        block:
+            - name: PRELIM | check current yum module
+              shell: >-
+                  yum module list --enabled {{ pgs9stig_postgres_module_name }}
+                  | grep -E ^{{ pgs9stig_postgres_module_name | regex_escape }}
+                  | awk '{print $2}'
+              check_mode: no
+              register: pgs9stig_discovered_yum_module
+              changed_when: pgs9stig_discovered_yum_module.stdout == ""
+              failed_when: >-
+                  pgs9stig_discovered_yum_module.stdout
+                  | default(pgs9stig_postgres_module_version, True)
+                  is version_compare(pgs9stig_postgres_module_version, '<')
+
+            - name: PRELIM | enable yum module
+              command: yum module enable -y {{ pgs9stig_postgres_module_name }}:{{ pgs9stig_postgres_module_version }}
+              when: pgs9stig_discovered_yum_module is changed
+        when:
+              - ansible_distribution_major_version is version_compare('8', '>=')
+              - ansible_os_family == 'RedHat'
+
+      - name: "PRELIM | Install Postgres packages"
+        package:
+            name: "{{ pgs9stig_postgres_packages }}"
+      - name: "PRELIM | find postgresql-setup binary"
+        shell: rpm -ql {{ pgs9stig_postgres_packages | join(" ") }} | grep bin/postgresql.*-setup$
+        args:
+            warn: no
+        check_mode: no
+        changed_when: no
+        register: pgs9stig_setup_bin
+        failed_when:
+            - pgs9stig_setup_bin is failed or
+              pgs9stig_setup_bin.stdout_lines | count != 1
+
+      - name: "PRELIM | Initialize Postgres Database"
+        command: "{{ pgs9stig_setup_bin.stdout }} initdb"
+        register: pgs9stig_initdb_result
+        failed_when:
+            - pgs9stig_initdb_result is failed
+            - >-
+                'is not empty!' not in pgs9stig_initdb_result.stderr
+        changed_when:
+            - >-
+                'is not empty!' not in pgs9stig_initdb_result.stderr
+
+      - name: "PRELIM | Ensure postgres is started"
+        service:
+            name: "{{ pgs9stig_postgres_service }}"
+            state: started
+  tags:
+      - always
+
+
+- name: "PRELIM | Appendix F: Finding the PostgreSQL Configured Data Directory (PGDATA)"
+  block:
+      - name: "PRELIM | Appendix F: Finding the PostgreSQL Configured Data Directory (PGDATA)"
+        shell: set -o pipefail ; psql -c 'show data_directory' | tail -n+3 | head -n 1 | cut -c2-
+        check_mode: no
+        changed_when: no
+        register: pgs9stig_pgdata_cmd
+        become: yes
+        become_user: "{{ pgs9stig_postgres_user }}"
+
+      - name: "PRELIM | make pgdata available as variable"
+        set_fact:
+            pgs9stig_pgdata: "{{ pgs9stig_pgdata_cmd.stdout }}"
+  when: pgs9stig_pgdata is not defined
+  tags:
+      - always
+
+
+- name: "PRELIM | Appendix B: pgaudit"
+  block:
+      - name: "PRELIM | Appendix B: install pgaudit"
+        package:
+            name: "{{ pgs9stig_pgaudit_packages }}"
+
+      - name: "PRELIM | Appendix B: configure pgaudit"
+        lineinfile:
+            path: "{{ pgs9stig_pgdata }}/postgresql.conf"
+        module_defaults: "{{ pgs9stig_lineinfile }}"
+        register: pgs9stig_pgaudit_conf_install
+        notify: restart postgres
+        with_dict:
+            shared_preload_libraries: "'pgaudit'"
+            pgaudit.log_catalog: "'on'"
+            pgaudit.log_level: "'log'"
+            pgaudit.log_parameter: "'on'"
+            pgaudit.log_relation: "'off'"
+            pgaudit.log_statement_once: "'off'"
+            pgaudit.log: "{{ pgs9stig_pgaudit_log }}"
+
+      - name: "PRELIM | Appendix C: Logging | reload postgres"
+        service:
+            name: "{{ pgs9stig_postgres_service }}"
+            state: reloaded
+        when:
+            - pgs9stig_pgaudit_conf_install is changed
+  when:
+      - pgs9stig_configure_pgaudit
+      - pgs9_00_000200 or
+        pgs9_00_004400 or
+        pgs9_00_004900 or
+        pgs9_00_005000 or
+        pgs9_00_005200 or
+        pgs9_00_005500 or
+        pgs9_00_005600 or
+        pgs9_00_005900 or
+        pgs9_00_006000 or
+        pgs9_00_006100 or
+        pgs9_00_006300 or
+        pgs9_00_006400 or
+        pgs9_00_006600 or
+        pgs9_00_006700 or
+        pgs9_00_008600 or
+        pgs9_00_009800 or
+        pgs9_00_010000 or
+        pgs9_00_012500 or
+        pgs9_00_012600 or
+        pgs9_00_012700 or
+        false
+  tags:
+      - cat2
+      - medium
+      - PGS9-00-000200
+      - PGS9-00-004400
+      - PGS9-00-004900
+      - PGS9-00-005000
+      - PGS9-00-005200
+      - PGS9-00-005500
+      - PGS9-00-005600
+      - PGS9-00-005900
+      - PGS9-00-006000
+      - PGS9-00-006100
+      - PGS9-00-006300
+      - PGS9-00-006400
+      - PGS9-00-006600
+      - PGS9-00-006700
+      - PGS9-00-008600
+      - PGS9-00-009800
+      - PGS9-00-010000
+      - PGS9-00-012500
+      - PGS9-00-012600
+      - PGS9-00-012700
+
+
+- name: "PRELIM | Appendix C: Logging"
+  block:
+      - name: "PRELIM | Appendix C: Logging | stderr"
+        lineinfile:
+            path: "{{ pgs9stig_pgdata }}/postgresql.conf"
+        module_defaults: "{{ pgs9stig_lineinfile }}"
+        register: pgs9stig_log_stderr_result
+        with_dict:
+            log_destination: "'stderr'"
+            logging_collector: "on"
+            log_directory: "'pg_log'"
+            log_filename: "'postgresql-%a.log'"
+            log_file_mode: "0600"
+            log_truncate_on_rotation: "on"
+            log_rotation_age: "1d"
+            log_rotation_size: 0
+        when: pgs9stig_log_destination == 'stderr'
+
+      - name: "PRELIM | Appendix C: Logging | syslog"
+        lineinfile:
+            path: "{{ pgs9stig_pgdata }}/postgresql.conf"
+        module_defaults: "{{ pgs9stig_lineinfile }}"
+        register: pgs9stig_log_syslog_result
+        with_dict:
+            log_destination: "'syslog'"
+            syslog_facility: "'LOCAL0'"
+            syslog_ident: "'postgres'"
+        when: pgs9stig_log_destination == 'syslog'
+
+      - name: "PRELIM | Appendix C: Logging | rsyslog"
+        block:
+            - name: "PRELIM | Appendix C: Logging | install rsyslog"
+              yum:
+                  name: rsyslog
+
+            - name: "PRELIM | Appendix C: Logging | configure rsyslog"
+              blockinfile:
+                  path: "{{ pgs9stig_rsyslog_conf }}"
+                  create: yes
+                  mode: 0644
+                  block: |
+                      # Log postgres items to file
+                      local0.*                                                {{ pgs9stig_rsyslog_log_path }}
+              register: pgs9stig_rsyslog_conf_result
+
+            - name: "PRELIM | Appendix C: Logging | start rsyslog"
+              service:
+                  name: rsyslog
+                  state: "{{ pgs9stig_rsyslog_conf_result is changed | ternary('re', '') }}started"
+
+            - name: "PRELIM | Appendix C: Logging | configure logrotate"
+              lineinfile:
+                  path: /etc/logrotate.d/syslog
+                  insertbefore: ^{$
+                  line: "{{ pgs9stig_rsyslog_log_path }}"
+        when: pgs9stig_with_rsyslog
+
+      - name: "PRELIM | Appendix C: Logging | reload postgres"
+        service:
+            name: "{{ pgs9stig_postgres_service }}"
+            state: reloaded
+        when:
+            - pgs9stig_log_stderr_result is changed or
+              pgs9stig_log_syslog_result is changed or
+              pgs9stig_rsyslog_conf_result is changed
+  when:
+      - pgs9_00_000200 or
+        pgs9_00_000400 or
+        pgs9_00_003700 or
+        pgs9_00_004100 or
+        pgs9_00_004200 or
+        pgs9_00_004500 or
+        pgs9_00_004600 or
+        pgs9_00_004700 or
+        pgs9_00_004800 or
+        pgs9_00_005100 or
+        pgs9_00_005300 or
+        pgs9_00_005400 or
+        pgs9_00_005700 or
+        pgs9_00_006200 or
+        pgs9_00_006500 or
+        pgs9_00_006800 or
+        pgs9_00_006900 or
+        pgs9_00_008600 or
+        pgs9_00_010400 or
+        pgs9_00_011100 or
+        pgs9_00_011300 or
+        false
+  tags:
+      - cat2
+      - medium
+      - PGS9-00-000200
+      - PGS9-00-000400
+      - PGS9-00-003700
+      - PGS9-00-004100
+      - PGS9-00-004200
+      - PGS9-00-004500
+      - PGS9-00-004600
+      - PGS9-00-004700
+      - PGS9-00-004800
+      - PGS9-00-005100
+      - PGS9-00-005300
+      - PGS9-00-005400
+      - PGS9-00-005700
+      - PGS9-00-006200
+      - PGS9-00-006500
+      - PGS9-00-006800
+      - PGS9-00-006900
+      - PGS9-00-008600
+      - PGS9-00-010400
+      - PGS9-00-011100
+      - PGS9-00-011300

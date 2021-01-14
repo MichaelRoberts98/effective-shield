@@ -1,0 +1,12 @@
+- name: sshd_use_approved_macs
+  vars:
+    ld_rule_name: sshd_use_approved_macs
+    ld_rule_title_cis: Ensure only approved MAC algorithms are used
+    ld_rule_title_stig: configure the SSH daemon to only use Message Authentication Codes (MACs) employing FIPS 140-2 approved cryptographic hash algorithms
+    ld_rule_sev_cis: Level 1
+    ld_rule_sev_stig: MEDIUM
+    ld_option: MACs
+    ld_value_stig: hmac-sha2-256,hmac-sha2-512
+    ld_value_cis: "{{ lockdown_linux_cis_sshd_approved_macs }}"
+  block:
+  - import_tasks: lib/sshd_config.yml

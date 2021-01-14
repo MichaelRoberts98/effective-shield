@@ -1,0 +1,266 @@
+---
+
+pgs9stig_cat1: yes
+pgs9stig_cat2: yes
+pgs9stig_cat3: yes
+
+pgs9stig_postgres_module_name: postgresql
+pgs9stig_postgres_module_version: 12
+
+pgs9stig_postgres_packages: >-
+    {{ pgs9stig_postgres_packages_simple
+    if ansible_distribution_major_version | default('8') is version_compare('8', '>=')
+    else pgs9stig_postgres_packages_el7 }}
+pgs9stig_postgres_packages_simple:
+    - postgresql-server
+    - postgresql
+pgs9stig_postgres_packages_el7:
+    - rh-postgresql12-postgresql-server-syspaths
+    - rh-postgresql12-postgresql-syspaths
+
+pgs9stig_configure_pgaudit: yes
+pgs9stig_pgaudit_packages:
+    - >-
+        {{ 'pgaudit'
+        if ansible_distribution_major_version | default('8') is version_compare('8', '>=')
+        else 'rh-postgresql12-pgaudit' }}
+
+pgs9stig_postgres_user: postgres
+pgs9stig_postgres_service: postgresql
+
+pgs9stig_allowed_superusers:
+    - "{{ pgs9stig_postgres_user }}"
+
+# Appendix C: Logging
+# possible values: stderr, syslog
+pgs9stig_log_destination: syslog
+
+# only takes effect for stderr logging
+pgs9stig_log_directory: "{{ pgs9stig_pgdata }}/pg_log"
+
+# Configure rsyslog and logrotate
+# only takse effect for syslog logging
+pgs9stig_configure_rsyslog: yes
+
+# only takes effect for syslog logging with rsyslog
+pgs9stig_rsyslog_log_path: /var/log/postgres
+pgs9stig_rsyslog_conf: /etc/rsyslog.d/postgres.conf
+
+
+# Show Changed for values requiring local documentation
+pgs9stig_warn_docs: yes
+
+# Show Changed for items requiring manual verification
+pgs9stig_warn_manual: yes
+
+# Show Changed for uncorrected open findings
+pgs9stig_warn_finding: yes
+
+# tweak role to run in a non-privileged container
+pgs9stig_system_is_container: no
+
+# log_line_prefix
+# PGS9-00-000200: '< %m %u %d %e: >'
+# PGS9-00-004600: '< %m %u %c: >'
+# PGS9-00-004700: '< %m %u %c: >'
+# PGS9-00-005100: '< %m %u %d %c: >'
+# PGS9-00-006200: If log_line_prefix does not contain at least %m %u %d %c, this is a finding.
+# PGS9-00-007100: If log_line_prefix does not contain %m %u %d %s, this is a finding. '< %m %a %u %d %r %p %i %e %s>'
+# PGS9-00-007700: If log_line_prefix does not contain %m, this is a finding.
+# PGS9-00-007800: If log_line_prefix does not contain %m, %u, %d, %p, %r, %a, this is a finding. '< %m %u %d %p %r %a >'
+# PGS9-00-008800: '< %m %a %u %d %r %p %m >'
+# PGS9-00-009700: If log_line_prefix does not contain at least '< %m %a %u %d %r %p %m >', this is a finding.
+# PGS9-00-010400: '< %m %u %d %c: >'
+# PGS9-00-011100: If the query result does not contain "%m", this is a finding.
+# PGS9-00-012600: '< %m %u %c: >'
+# this line includes all of the above except %i %e, not explicitly required
+pgs9stig_log_line_prefix: "'< %m %a %u %d %r %p %c %s >'"
+
+# pgaudit.log
+# PGS9-00-000200: 'all, -misc'
+# PGS9-00-004400: If pgaudit.log does not contain, "ddl, write, role", this is a finding. 'ddl, write, role'
+# PGS9-00-004900: 'role'
+# PGS9-00-005000: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-005200: 'ddl'
+# PGS9-00-005500: 'read'
+# PGS9-00-005600: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-005800: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-005900: If pgaudit.log does not contain, "ddl, write, role", this is a finding. 'ddl, write, role'
+# PGS9-00-006000: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-006100: If the output does not contain role, read, write, and ddl, this is a finding. 'role'
+# PGS9-00-006300: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-006400: If the output does not contain role, this is a finding. 'role'
+# PGS9-00-006600: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-006700: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-009800: If pgaudit.log does not contain ddl, role, read, write, function this is a finding. 'write, ddl, role, read, function'
+# PGS9-00-010000: 'role'
+# PGS9-00-012500: If the output does not contain role, read, write, and ddl, this is a finding. 'ddl, role, read, write'
+# PGS9-00-012600: If the output does not contain role, read, write, and ddl, this is a finding. 'read, write'
+# PGS9-00-012600: 'ddl, role, read, write'
+pgs9stig_pgaudit_log: "'write, ddl, role, read, function'"
+
+
+# STIG items that have been documented locally (squashes "changed" for these)
+# set '{pgs9stig_warn_docs: no}' above to squash all
+pgs9stig_doc_001200: no
+pgs9stig_max_connections: 100
+pgs9stig_doc_003700: no
+pgs9stig_doc_006500: no
+pgs9stig_doc_010400: no
+pgs9stig_doc_011300: no
+
+
+# STIG items that require manual verification (squashes "changed" for these)
+# set '{pgs9stig_warn_manual: no}' above to squash all
+pgs9stig_manual_000400: no
+pgs9stig_manual_002300: no
+pgs9stig_manual_003800: no
+pgs9stig_manual_004200: no
+pgs9stig_manual_011300: no
+pgs9stig_manual_012200: no
+
+
+# PGS9-00-000100
+pgs9stig_port: 5432
+
+# PGS9-00-002400
+pgs9stig_log_timezone: UTC
+
+# PGS9-00-004300
+pgs9stig_multiple_versions_in_use: no
+
+# PGS9-00-010600
+pgs9stig_statement_timeout: 10000
+pgs9stig_tcp_keepalives_idle: 10
+pgs9stig_tcp_keepalives_interval: 10
+pgs9stig_tcp_keepalives_count: 10
+
+
+# HIGH
+pgs9_00_000300: yes
+pgs9_00_008000: yes
+pgs9_00_008200: yes
+pgs9_00_010200: yes
+pgs9_00_011700: yes
+pgs9_00_012300: yes
+pgs9_00_012800: yes
+
+# MEDIUM
+pgs9_00_000100: yes
+pgs9_00_000200: yes
+pgs9_00_000400: yes
+pgs9_00_000500: yes
+pgs9_00_000600: yes
+pgs9_00_000700: yes
+pgs9_00_000710: yes
+pgs9_00_000800: yes
+pgs9_00_000900: yes
+pgs9_00_001100: yes
+pgs9_00_001200: yes
+pgs9_00_001300: yes
+pgs9_00_001400: yes
+pgs9_00_001700: yes
+pgs9_00_001800: yes
+pgs9_00_001900: yes
+pgs9_00_002000: yes
+pgs9_00_002100: yes
+pgs9_00_002200: yes
+pgs9_00_002300: yes
+pgs9_00_002400: yes
+pgs9_00_002500: yes
+pgs9_00_002600: yes
+pgs9_00_002700: yes
+pgs9_00_003000: yes
+pgs9_00_003100: yes
+pgs9_00_003200: yes
+pgs9_00_003300: yes
+pgs9_00_003500: yes
+pgs9_00_003600: yes
+pgs9_00_003700: yes
+pgs9_00_003800: yes
+pgs9_00_004000: yes
+pgs9_00_004100: yes
+pgs9_00_004200: yes
+pgs9_00_004300: yes
+pgs9_00_004400: yes
+pgs9_00_004500: yes
+pgs9_00_004600: yes
+pgs9_00_004700: yes
+pgs9_00_004800: yes
+pgs9_00_004900: yes
+pgs9_00_005000: yes
+pgs9_00_005100: yes
+pgs9_00_005200: yes
+pgs9_00_005300: yes
+pgs9_00_005400: yes
+pgs9_00_005500: yes
+pgs9_00_005600: yes
+pgs9_00_005700: yes
+pgs9_00_005800: yes
+pgs9_00_005900: yes
+pgs9_00_006000: yes
+pgs9_00_006100: yes
+pgs9_00_006200: yes
+pgs9_00_006300: yes
+pgs9_00_006400: yes
+pgs9_00_006500: yes
+pgs9_00_006600: yes
+pgs9_00_006700: yes
+pgs9_00_006800: yes
+pgs9_00_006900: yes
+pgs9_00_007000: yes
+# Need to generate certs first
+pgs9_00_007200: no
+pgs9_00_007400: yes
+pgs9_00_007700: yes
+pgs9_00_007800: yes
+pgs9_00_008100: yes
+pgs9_00_008300: yes
+pgs9_00_008400: yes
+pgs9_00_008500: yes
+pgs9_00_008600: yes
+pgs9_00_008700: yes
+pgs9_00_008800: yes
+pgs9_00_008900: yes
+pgs9_00_009100: yes
+pgs9_00_009200: yes
+pgs9_00_009400: yes
+pgs9_00_009500: yes
+pgs9_00_009600: yes
+pgs9_00_009700: yes
+pgs9_00_009800: yes
+pgs9_00_009900: yes
+pgs9_00_010000: yes
+pgs9_00_010100: yes
+pgs9_00_010300: yes
+pgs9_00_010400: yes
+pgs9_00_010500: yes
+pgs9_00_010600: yes
+pgs9_00_010700: yes
+pgs9_00_011100: yes
+pgs9_00_011200: yes
+pgs9_00_011300: yes
+pgs9_00_011400: yes
+pgs9_00_011500: yes
+pgs9_00_011600: yes
+pgs9_00_011800: yes
+pgs9_00_011900: yes
+pgs9_00_012000: yes
+pgs9_00_012200: yes
+pgs9_00_012500: yes
+pgs9_00_012600: yes
+pgs9_00_012700: yes
+pgs9_00_007100: yes
+
+
+pgs9stig_boot_part: "{{ pgs9_00_boot_part.stdout }}"
+
+pgs9stig_lineinfile:
+    lineinfile:
+        line: "{{ item.key }} = {{ item.value }}"
+        regexp: "^{{ item.key | regex_escape }} *="
+        insertafter: "#{{ item.key | regex_escape }} *="
+
+
+pgs9stig_machine_uses_uefi: "{{ pgs9_00_sys_firmware_efi.stat.exists }}"
+pgs9stig_grub_cfg_path: "{{ pgs9stig_machine_uses_uefi | ternary('/boot/efi/EFI/' ~ (ansible_distribution | lower) ~ '/grub.cfg', '/boot/grub2/grub.cfg') }}"

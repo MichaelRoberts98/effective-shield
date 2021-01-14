@@ -1,0 +1,28 @@
+---
+# defaults file for lockdown-linux
+
+# lockdown_linux_standard options:
+# cis_rhel7
+# stig_ol5
+# stig_ol6
+# stig_ol7
+# stig_rhel6
+# stig_rhel7
+# stig_sle12
+# stig_ubuntu1604
+# stig_ubuntu1804
+#lockdown_linux_standard: "{{ omit }}"
+lockdown_linux_standard: cis_rhel7
+#lockdown_linux_standard: stig_rhel7
+
+
+lockdown_linux_cis_sshd_approved_macs:
+- hmac-sha2-512-etm@openssh.com
+- hmac-sha2-256-etm@openssh.com
+- umac-128-etm@openssh.com
+- hmac-sha2-512
+- hmac-sha2-256
+- umac-128@openssh.com
+# not supported on RHEL 7
+#- curve25519-sha256@libssh.org
+#- diffie-hellman-group-exchange-sha256
