@@ -1,0 +1,15 @@
+---
+- name: Include the preliminary tasks
+  include_tasks: prelim.yml
+  tags:
+      - prelim_tasks
+      - always
+
+- name: Execute the category 1 (highest severity) tasks
+  include_tasks: cat1.yml
+
+- name: Execute the category 2 (medium severity) tasks
+  include_tasks: cat2.yml
+
+- name: Execute the category 3 (lowest severity) tasks
+  include_tasks: cat3.yml

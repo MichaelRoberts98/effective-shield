@@ -1,0 +1,172 @@
+# Hotfix KB2842230 fixes OOM and StackOverflow errors when running long script on 2k8r2
+# https://support.microsoft.com/en-us/kb/2842230
+- name: "PRELIM | KB2842230 | Check PowerShell equals 3."
+  win_shell: $PSVersionTable.psversion.Major -eq 3
+  register: check_powershell_version
+  check_mode: no
+  changed_when: no
+  tags:
+      - cat1
+      - cat2
+      - cat3
+      - low
+      - medium
+      - high
+
+- name: "PRELIM | KB2842230 | Check for hotfix KB2842230."
+  win_shell: Get-HotFix -ID KB2842230
+  register: find_hotfix
+  check_mode: no
+  changed_when: no
+  ignore_errors: yes
+  tags:
+      - cat1
+      - cat2
+      - cat3
+      - low
+      - medium
+      - high
+
+- block:
+    - name: "PRELIM | KB2842230 | Get environment temp directory"
+      win_shell: echo $env:temp
+      register: temp_dir
+
+    - name: "PRELIM | KB2842230 | Copy hotfix KB2842230."
+      win_copy: 
+          src: Windows6.1-KB2842230-x64.msu
+          dest: "{{ temp_dir.stdout_lines[0] }}"
+      register: copy_hotfix
+      check_mode: no
+
+    - name: "PRELIM | KB2842230 | Extract hotfix KB2842230."
+      win_shell: wusa.exe {{ temp_dir.stdout_lines[0] }}/Windows6.1-KB2842230-x64.msu /extract:{{ temp_dir.stdout_lines[0] }}/hotfix/
+      register: extract_hotfix
+      check_mode: no
+
+    - name: "PRELIM | KB2842230 | Apply hotfix KB2842230."
+      win_shell:  dism.exe /quiet /norestart /LogPath:{{ temp_dir.stdout_lines[0] }}/hotfix/hotfix.log /online /add-package /PackagePath:{{ temp_dir.stdout_lines[0] }}/hotfix/Windows6.1-KB2842230-x64.cab
+      register: apply_hotfix
+      check_mode: no
+      # dism always returns rc: 1 even though it worked
+      ignore_errors: yes
+
+    - name: "PRELIM | KB2842230 | Check for completion."
+      win_shell: Select-String -Path {{ temp_dir.stdout_lines[0] }}/hotfix/hotfix.log -Pattern 'Ending Dism.exe session'
+      register: hotfix_log
+      until: hotfix_log.stdout
+      check_mode: no
+
+    - name: "PRELIM | KB2842230 | Reboot."
+      win_reboot:
+      register: reboot
+      check_mode: no
+
+    - name: "PRELIM | KB2842230 | Clean up."
+      win_file:
+          path: "{{ temp_dir.stdout_lines[0] }}/Windows6.1-KB2842230-x64.msu"
+          state: absent
+      check_mode: no
+
+    - name: "PRELIM | KB2842230 | Clean up."
+      win_file:
+          path: "{{ temp_dir.stdout_lines[0] }}/hotfix/"
+          state: absent
+      check_mode: no
+
+  # when: "'True' in check_powershell_version.stdout and not find_hotfix.stdout"
+  tags:
+      - cat1
+      - cat2
+      - cat3
+      - low
+      - medium
+      - high
+
+- name: "PRELIM | Update the Windows Security Options File | Copy new file over"
+  win_copy:
+      src: sceregvl.inf
+      dest: c:\windows\inf\sceregvl.STIG.inf
+  register: copy
+
+- block:
+    - name: "PRELIM | Update the Windows Security Options File | Take ownership of the file"
+      win_owner: 
+          path: c:\windows\inf\sceregvl.inf
+          user: Administrator
+
+    - name: "PRELIM | Update the Windows Security Options File | Add Full permissions"
+      win_acl:
+          path: 'c:\windows\inf\sceregvl.inf'
+          user: 'Administrator'
+          rights: 'FullControl'
+          type: 'allow'
+          state: 'present'
+
+    - name: "PRELIM | Update the Windows Security Options File | Backup originial file"
+      win_shell: mv c:\windows\inf\sceregvl.inf c:\windows\inf\sceregvl.inf.bak
+
+    - name: "PRELIM | Update the Windows Security Options File | Rename new file"
+      win_shell: cp c:\windows\inf\sceregvl.STIG.inf c:\windows\inf\sceregvl.inf
+
+    - name: "PRELIM | Update the Windows Security Options File | Re-register scecli.dll"
+      win_shell: "regsvr32 /s scecli.dll"
+
+# Fix ACLs of new file to match original file
+    - name: Disable inherited ACE's
+      win_acl_inheritance:
+          path: 'c:\windows\inf\sceregvl.inf'
+          state: absent
+
+    - name: "PRELIM | Update the Windows Security Options File | Set ACLs to match original"
+      win_acl:
+          path: 'c:\windows\inf\sceregvl.inf'
+          user: "{{ item.user }}"
+          rights: "{{ item.rights }}"
+          type: 'allow'
+          state: "{{ item.state }}"
+      with_items: 
+        - user: Administrator
+          rights: 'FullControl'
+          state: absent
+        - user: SYSTEM
+          rights: 'Read,ReadAndExecute'
+          state: present
+        - user: Administrators
+          rights: 'Read,ReadAndExecute'
+          state: present
+        - user: Users
+          rights: 'Read,ReadAndExecute'
+          state: present
+        - user: 'NT SERVICE\TrustedInstaller'
+          rights: 'FullControl'
+          state: present
+        # For 2k12
+        # - user: 'ALL APPLICATION PACKAGES'
+        #   rights: 'Read,ReadAndExecute'
+        #   state: present
+
+  when: copy.changed
+  rescue:
+      # Remove the copied file so this block can be reran after fixing any issue
+      - name: "PRELIM | Update the Windows Security Options File | Clean up new file"
+        win_file:
+            path: c:\windows\inf\sceregvl.STIG.inf
+            state: absent
+  tags:
+      - cat1
+      - cat2
+      - cat3
+      - low
+      - medium
+      - high
+
+- name: "PRELIM | Gather secedit facts"
+  win_secedit_facts: 
+  tags:
+      - cat1
+      - cat2
+      - cat3
+      - low
+      - medium
+      - high
