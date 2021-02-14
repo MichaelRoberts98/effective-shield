@@ -105,3 +105,11 @@
       "version": "2.2.1",
       "description": "Detect processes masquerading as legitimate Windows processes"
     }
+    
+// select pid, local_address, local_port, remote_address, remote_port, state from process_open_sockets;
+
+// select DISTINCT process.name, listening.port, process.pid from processes AS process JOIN listening_ports AS listening on process.pid = listening.pid WHERE listening.address = '0.0.0.0';
+
+// select name,cmdline from processes;
+
+// select DISTINCT process.name, process.pid, sockets.local_port, sockets.remote_port from processes AS process JOIN process_open_sockets AS sockets on process.pid = sockets.pid;
