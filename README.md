@@ -1,3 +1,3 @@
 # effective-shield
 
-Add as many security tools/projects/stuff as we can
+General repository of helpful security tools
