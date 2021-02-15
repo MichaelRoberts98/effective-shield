@@ -78,3 +78,22 @@ rule url {
     condition:
         $url_regex
 }
+rule PHPDetection
+{
+    strings:
+        $exec_php_string = "shell_exec"
+        $passthru_string = "passthru”
+        $exec_string = "exec"
+        $system_string = "system"
+        $proc_open = "proc_open"
+        $pcntl_exec = "pcntl_exec"
+        $eval = "eval"
+        $assert = "assert"
+        $popen = "popen"
+        $curl_exec = "curl_exec"
+        $curl_multi_exec = "curl_multi_exec"
+        $parse_ini_file = "parse_ini_file"
+        $show_source = "show_source"
+    condition:
+        any of them
+}
